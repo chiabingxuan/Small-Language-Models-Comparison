@@ -6,6 +6,7 @@
 **/data/
 *.pkl
 *.tmp
+*.pth
 
 # Ignore venv
 venv/

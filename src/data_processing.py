@@ -1,53 +1,56 @@
 from collections import Counter
 from datasets import load_dataset
+import nltk
+from nltk.corpus import reuters
+from sklearn.model_selection import train_test_split
 from torchtext.data.utils import get_tokenizer
+from transformers import AutoTokenizer
 
 
-### Getting Data (WikiText2) ###
-def get_data():
-    wikitext2_raw = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1")
+nltk.download("reuters")
+nltk.download("punkt")
+nltk.download("punkt_tab")
 
+
+### Getting Data ###
+def get_and_split_data(full_dataset_size, train_split, val_split, seed):
+    # Get reuters data from NLTK
+    doc_ids = reuters.fileids()
+    print(f"Total number of documents: {len(doc_ids)}")
+
+    # Cap off at dataset size chosen
+    doc_ids = doc_ids[:full_dataset_size]
+
+    # Do train-val-test split
+    train_and_val_ids, test_ids = train_test_split(doc_ids, train_size=train_split + val_split, random_state=seed)
+    train_ids, val_ids = train_test_split(train_and_val_ids, train_size=train_split / (train_split + val_split), random_state=seed)
+
+    # Select the data according to the ids in the train-val-test split
     docs_splits = dict()
-    total_dataset_size = 0
-    for phase in ["train", "validation", "test"]:
-        # Get the documents for the given dataset phase
-        docs_in_phase = list(wikitext2_raw[phase]["text"])
-        docs_splits[phase] = docs_in_phase
+    docs_splits["train"] = [reuters.raw(doc_id) for doc_id in train_ids]
+    docs_splits["validation"] = [reuters.raw(doc_id) for doc_id in val_ids]
+    docs_splits["test"] = [reuters.raw(doc_id) for doc_id in test_ids]
 
-        phase_size = len(docs_in_phase)
-        print(f"Size of {phase}: {phase_size}")
-        total_dataset_size += phase_size
-    
-    print(f"Total dataset size: {total_dataset_size}")
+    for phase in ["train", "validation", "test"]:
+        print(f"New {phase} size: {len(docs_splits[phase])}")
 
     return docs_splits
 
 
-def split_data(docs_splits, full_dataset_size, train_split, val_split):
-    train_count, val_count = int(train_split * full_dataset_size), int(val_split * full_dataset_size)
-    test_count = full_dataset_size - train_count - val_count
-
-    # Select the first few data according to the adjusted counts
-    corrected_docs_splits = dict()
-    corrected_docs_splits["train"] = docs_splits["train"][:train_count]
-    corrected_docs_splits["validation"] = docs_splits["validation"][:val_count]
-    corrected_docs_splits["test"] = docs_splits["test"][:test_count]
-
-    for phase in ["train", "validation", "test"]:
-        print(f"New {phase} size: {len(corrected_docs_splits[phase])}")
-
-    return corrected_docs_splits
-
-
 ### Data Processing ###
-def process_data(corrected_docs_splits):
+def process_data(docs_splits, using_subword):
     # Initialize the tokeniser
-    tokeniser = get_tokenizer("basic_english")
+    if using_subword:
+        tokeniser = AutoTokenizer.from_pretrained("google/bigbird-roberta-base")
+        tokenise_fn = lambda text: tokeniser.tokenize(text)
+    else:
+        tokeniser = get_tokenizer("basic_english")
+        tokenise_fn = lambda text: tokeniser(text)
 
     tokenised_docs = dict()
-    for phase, docs in corrected_docs_splits.items():
+    for phase, docs in docs_splits.items():
         # For each document in the phase, convert to lowercase, and then tokenise the document
-        tokens_across_docs = [tokeniser(doc.lower()) for doc in docs]
+        tokens_across_docs = [tokenise_fn(doc.lower()) for doc in docs]
         tokenised_docs[phase] = tokens_across_docs
 
     return tokenised_docs
@@ -78,3 +81,16 @@ def convert_tokens_to_ids(tokenised_docs, train_vocab):
         converted_tokenised_docs[phase] = converted_tokenised_docs_in_phase
     
     return converted_tokenised_docs
+
+
+def process_and_format_docs_to_ids(docs_splits, using_subword):
+    # Data processing
+    tokenised_docs = process_data(docs_splits=docs_splits, using_subword=using_subword)
+
+    # Make vocabulary from train set
+    train_vocab = make_train_vocab(train_docs=tokenised_docs["train"])
+
+    # Use vocabulary to numericalise train, val and test datasets
+    converted_tokenised_docs = convert_tokens_to_ids(tokenised_docs=tokenised_docs, train_vocab=train_vocab)
+
+    return converted_tokenised_docs, train_vocab
