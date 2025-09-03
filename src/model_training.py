@@ -1,6 +1,7 @@
 import copy
 import datetime
 import logging
+import math
 import matplotlib.pyplot as plt
 import os
 import time
@@ -17,25 +18,23 @@ class TextDataset(Dataset):
     def __init__(self, data, seq_len):
         self.data = data        # List of tokenised and numericalised documents
         self.seq_len = seq_len  # Fixed sequence length for training
+        self.input_output_pairs = list()
+
+        # Loop through each document and get the corresponding input-output pairs
+        for doc in self.data:
+            for i in range(len(doc) - self.seq_len):
+                input_seq = doc[i: i + self.seq_len]
+                output_seq = doc[i + 1: i + self.seq_len + 1]
+                self.input_output_pairs.append((torch.tensor(input_seq, dtype=torch.long), torch.tensor(output_seq, dtype=torch.long)))
 
     # Defines the total number of samples in the dataset (number of input-output pairs across all documents)
     def __len__(self):
-        # If length of document is not longer than sequence length, the number of samples is 0
-        return sum(max(0, len(doc) - self.seq_len) for doc in self.data)
+        return len(self.input_output_pairs)
 
     # Retrieves a single sample (input-output pair) from the dataset
     def __getitem__(self, idx):     # idx: The index of the sample to retrieve
-        # Loop through each document and decrement idx to find the input-output pair corresponding to that index
-        for doc in self.data:
-            if idx < len(doc) - self.seq_len:
-                input_seq = doc[idx: idx + self.seq_len]
-                output_seq = doc[idx + 1: idx + self.seq_len + 1]
-                return torch.tensor(input_seq, dtype=torch.long), torch.tensor(output_seq, dtype=torch.long)
-            idx -= max(0, len(doc) - self.seq_len)
+        return self.input_output_pairs[idx]
 
-        # Index provided is out of range of the dataset
-        raise IndexError
-    
 
 def make_dataloaders(converted_tokenised_docs, seq_len, batch_size):
     # Create datasets
@@ -204,13 +203,17 @@ def train(model, converted_tokenised_docs, train_vocab, seq_len, batch_size, num
 
         # Train step
         train_loss = train_step(model=model, dataloader=train_loader, criterion=criterion, optimizer=optimizer, device=device, vocab_size=len(train_vocab), grad_clipping_max_norm=grad_clipping_max_norm)
+        train_perplexity = math.exp(train_loss)
         print("Train Loss: {:.4f}".format(train_loss))
+        print("Train Perplexity: {:.4f}".format(train_perplexity))
 
         # Validation step
         val_loss = val_step(model=model, dataloader=val_loader, criterion=criterion, device=device, vocab_size=len(train_vocab))
+        val_perplexity = math.exp(val_loss)
         print("Val Loss: {:.4f}".format(val_loss))
+        print("Val Perplexity: {:.4f}".format(val_perplexity))
 
-        logger.info(f"Epoch {epoch}/{num_epochs - 1} | Train Loss: {train_loss} | Val Loss: {val_loss}")
+        logger.info(f"Epoch {epoch}/{num_epochs - 1} | Train Loss: {train_loss} | Train Perplexity: {train_perplexity} | Val Loss: {val_loss} | Val Perplexity: {val_perplexity}")
 
         # Update history
         train_loss_history.append(train_loss)
