@@ -81,19 +81,6 @@ class LSTMLanguageModel(nn.Module):
     
     
 ### Model Training ###
-def setup_logger(save_name, current_date, logs_folder_path) -> logging.Logger:
-    logging.basicConfig(
-        filename=os.path.join(logs_folder_path, f"logs_{save_name}_{current_date}.txt"),
-        format="{asctime} - {levelname} - {message}",
-        style="{",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        level=logging.INFO,
-        filemode="w"
-    )
-
-    return logging.getLogger()
-
-
 def train_step(model, dataloader, criterion, optimizer, device, vocab_size, grad_clipping_max_norm):    
     # Set model to training mode
     model.train()
@@ -162,18 +149,13 @@ def val_step(model, dataloader, criterion, device, vocab_size):
     return val_loss
 
 
-def train(model, converted_tokenised_docs, train_vocab, seq_len, batch_size, num_epochs, lr, grad_clipping_max_norm, patience, device, save_name):
+def train(model, converted_tokenised_docs, train_vocab, seq_len, batch_size, num_epochs, lr, grad_clipping_max_norm, device, save_name):
     # Get current datetime, to be used in file names
     current_date = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
 
     # Create weights folder if it does not exist
     weights_folder_path = "weights"
     os.makedirs(weights_folder_path, exist_ok=True)
-
-    # Create logs folder if it does not exist, and get logger
-    logs_folder_path = "logs"
-    os.makedirs(logs_folder_path, exist_ok=True)
-    logger = setup_logger(save_name=save_name, current_date=current_date, logs_folder_path=logs_folder_path)
 
     # Get the dataloaders for the respective phases of the dataset
     train_loader, val_loader, _ = make_dataloaders(converted_tokenised_docs=converted_tokenised_docs, seq_len=seq_len, batch_size=batch_size)
@@ -185,13 +167,6 @@ def train(model, converted_tokenised_docs, train_vocab, seq_len, batch_size, num
     # Lists that will record how loss changes throughout the training process
     train_loss_history = []
     val_loss_history = []
-    
-    # Details of best performing model, to be updated during training
-    best_model_wts = copy.deepcopy(model.state_dict())
-    best_loss = float("inf")
-    
-    # Will track the number of consecutive epochs where the validation loss does not set a new best
-    counter = 0
     
     # Initial time
     since = time.time()
@@ -213,46 +188,9 @@ def train(model, converted_tokenised_docs, train_vocab, seq_len, batch_size, num
         print("Val Loss: {:.4f}".format(val_loss))
         print("Val Perplexity: {:.4f}".format(val_perplexity))
 
-        logger.info(f"Epoch {epoch}/{num_epochs - 1} | Train Loss: {train_loss} | Train Perplexity: {train_perplexity} | Val Loss: {val_loss} | Val Perplexity: {val_perplexity}")
-
         # Update history
         train_loss_history.append(train_loss)
         val_loss_history.append(val_loss)
-        
-        # Check if the current validation loss is the best
-        if val_loss < best_loss:
-            # There is an improvement in best validation loss
-            # Update best statistics
-            best_loss = val_loss
-
-            # Update best model weights
-            best_model_wts = copy.deepcopy(model.state_dict())
-
-            # Reset counter
-            counter = 0
-            
-            # Print details
-            print(f"Best val loss has improved. Counter: {counter} | Best val loss: {best_loss}")
-            logger.info(f"Epoch {epoch}/{num_epochs - 1} | Best val loss has improved | Counter: {counter} | Best val loss: {best_loss}")
-
-            # Save model weights temporarily
-            tmp_path = os.path.join(weights_folder_path, f"temp_model_weights_{save_name}.pth")
-            torch.save(best_model_wts, tmp_path)
-
-        else:
-            # There is no improvement in best validation loss
-            # Increment counter
-            counter += 1
-
-            # Print details
-            print(f"Best val loss did not improve. Counter: {counter} | Best val loss: {best_loss}")
-            logger.info(f"Epoch {epoch}/{num_epochs - 1} | Best val loss did not improve | Counter: {counter} | Best val loss: {best_loss}")
-
-            if counter >= patience:
-                # Training has gone too long without improvement in best validation loss - stop training early
-                print(f"Early stopping triggered. Best val loss did not improve for {patience} consecutive epochs.")
-                logger.info(f"Early stopping triggered. Best val loss did not improve for {patience} consecutive epochs.")
-                break
 
         print()
 
@@ -260,14 +198,10 @@ def train(model, converted_tokenised_docs, train_vocab, seq_len, batch_size, num
 
     # Print results of training
     print("Training completed in {:.0f}m {:.0f}s".format(time_elapsed // 60, time_elapsed % 60))
-    logger.info("Training completed in {:.0f}m {:.0f}s".format(time_elapsed // 60, time_elapsed % 60))
 
     # Save best model weights
-    model_weights_file_path = os.path.join(weights_folder_path, f"best_model_weights_{save_name}_{current_date}.pth")
-    torch.save(best_model_wts, model_weights_file_path)
-    
-    # Load best model weights
-    model.load_state_dict(best_model_wts)
+    model_weights_file_path = os.path.join(weights_folder_path, f"model_weights_{save_name}_{current_date}.pth")
+    torch.save(model.state_dict(), model_weights_file_path)
 
     return model, train_loss_history, val_loss_history
 
@@ -277,20 +211,19 @@ def plot_and_save_training_metrics(train_loss_history, val_loss_history, save_na
     plots_folder_path = "plots"
     os.makedirs(plots_folder_path, exist_ok=True)
 
-    fig = plt.figure()
+    fig, ax = plt.subplots(figsize=(6, 4))
     
     # Plot loss curves
-    ax1 = fig.add_subplot(121)
-    ax1.title.set_text("Loss")
-    ax1.plot(train_loss_history, label="train_loss")
-    ax1.plot(val_loss_history, label="val_loss")
-    ax1.set_xlabel("No. of epochs")
-    ax1.set_ylabel("Loss")
-    ax1.legend()
+    ax.title.set_text("Loss")
+    ax.plot(train_loss_history, label="train_loss")
+    ax.plot(val_loss_history, label="val_loss")
+    ax.set_xlabel("No. of epochs")
+    ax.set_ylabel("Loss")
+    ax.legend()
 
     fig.tight_layout()
 
     # Save the plot
-    plt.savefig(os.path.normpath(os.path.join("plots", f"loss_curves_{save_name}.png")))
+    plt.savefig(os.path.normpath(os.path.join(plots_folder_path, f"loss_curves_{save_name}.png")))
 
     plt.show()

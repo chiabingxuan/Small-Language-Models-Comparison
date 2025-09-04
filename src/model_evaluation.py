@@ -1,4 +1,4 @@
-from model_training import make_dataloaders
+from src.model_training import make_dataloaders
 import os
 import torch
 import torch.nn.functional as F
@@ -8,7 +8,7 @@ from tqdm import tqdm
 def load_model(model_initialised, filename, device):
     # Get path to .pth file containing existing weights
     weights_folder_path = "weights"
-    weights_file_path = os.path.join(weights_folder_path, f"{filename}.csv")
+    weights_file_path = os.path.join(weights_folder_path, f"{filename}.pth")
 
     # Load .pth file into model
     state_dict = torch.load(weights_file_path, map_location=torch.device(device))
@@ -67,9 +67,9 @@ def generate_text(model, train_vocab, start_seq, temperature, max_len=300):
     x, hidden = torch.tensor([start_seq_ids], dtype=torch.long), None
 
     # Final generated sequence of words
-    generated_text = start_seq
+    generated_text = start_seq.copy()
 
-    for _ in range(max_len):
+    for _ in tqdm(range(max_len)):
         # Get outputs and update hidden state of model
         outputs, hidden = model(x, hidden)
         outputs = outputs[:, -1, :]                                             # Take last step's output (last time step's logits, for each sample in the "batch")
