@@ -21,9 +21,9 @@ git --version
 git clone https://github.com/chiabingxuan/Small-Language-Models-Comparison.git
 ```
 
-4. Install necessary packages:
+4. Set your working directory to the folder containing the cloned repository:
 ```
-pip install -r requirements.txt
+cd Small-Language-Models-Comparison
 ```
 
 5. Create a Python virtual environment named `venv/`:
@@ -38,8 +38,13 @@ python -m venv venv
 venv\Scripts\activate
 ```
 
-7. To obtain, process and save the data from the Reuters corpus, run `data_processing.ipynb`. Under "Getting the Data (Reuters)", you can adjust the train-validation-test split to your liking. The tokenised data will be saved under `data/` directory.
+7. Install necessary packages:
+```
+pip install -r requirements.txt
+```
 
-8. To carry out model training, run `model_training.ipynb`. Under "Set Model Hyperparameters" and "Set Training Hyperparameters", you can adjust the respective hyperparameters to your liking. The `state_dict` of the trained models will be saved under `weights/` directory. Plots of the loss curves will be saved under `plots/` directory.
+8. To obtain, process and save the data from the Reuters corpus, run `data_processing.ipynb`. Under "Getting the Data (Reuters)", you can adjust the train-validation-test split to your liking. The tokenised data will be saved under `data/` directory.
 
-9. To evaluate model performance, run `model_evaluation.ipynb`. Under "Set Parameters", make sure the parameter values correspond to those that were set during model training.
+9. To carry out model training, run `model_training.ipynb`. Under "Set Model Hyperparameters" and "Set Training Hyperparameters", you can adjust the respective hyperparameters to your liking. The `state_dict` of the trained models will be saved under `weights/` directory. Plots of the loss curves will be saved under `plots/` directory.
+
+10. To evaluate model performance, run `model_evaluation.ipynb`. Under "Set Parameters", make sure the parameter values correspond to those that were set during model training.
